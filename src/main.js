@@ -6,6 +6,7 @@ import { Board } from './ui/board.js';
 import { Animator } from './ui/animator.js';
 import { Stats } from './ui/stats.js';
 import { InfoCard } from './ui/infoCard.js';
+import { bindShortcuts } from './ui/shortcuts.js';
 
 const el = {
   boardArea: document.getElementById('board'),
@@ -22,6 +23,7 @@ const el = {
   step: document.getElementById('step'),
   clearPath: document.getElementById('clearPath'),
   clearAll: document.getElementById('clearAll'),
+  generate: document.getElementById('generate'),
   status: document.getElementById('status'),
   statVisited: document.getElementById('statVisited'),
   statLen: document.getElementById('statLen'),
@@ -287,6 +289,15 @@ for (const input of [el.diagonals, el.heuristic]) {
     reset();
   });
 }
+
+// Space picks the sensible action for the current phase; the rest just forward.
+bindShortcuts({
+  ' ': () => (phase === 'playing' || phase === 'paused' ? el.pause : el.visualize).click(),
+  s: () => el.step.click(),
+  r: () => el.clearPath.click(),
+  c: () => el.clearAll.click(),
+  m: () => el.generate.click(),
+});
 
 // ---- init ----
 
