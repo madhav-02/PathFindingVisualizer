@@ -5,6 +5,7 @@ import { algorithms, algorithmById } from './algorithms/index.js';
 import { Board } from './ui/board.js';
 import { Animator } from './ui/animator.js';
 import { Stats } from './ui/stats.js';
+import { InfoCard } from './ui/infoCard.js';
 
 const el = {
   boardArea: document.getElementById('board'),
@@ -27,6 +28,12 @@ const el = {
   statCost: document.getElementById('statCost'),
   statTime: document.getElementById('statTime'),
   statResult: document.getElementById('statResult'),
+  algoName: document.getElementById('algoName'),
+  algoDesc: document.getElementById('algoDesc'),
+  algoBadges: document.getElementById('algoBadges'),
+  algoTime: document.getElementById('algoTime'),
+  algoSpace: document.getElementById('algoSpace'),
+  algoNote: document.getElementById('algoNote'),
 };
 
 const GAP = 1; // must match the grid gap in styles.css
@@ -66,7 +73,17 @@ const stats = new Stats({
   result: el.statResult,
 });
 
+const infoCard = new InfoCard({
+  name: el.algoName,
+  desc: el.algoDesc,
+  badges: el.algoBadges,
+  time: el.algoTime,
+  space: el.algoSpace,
+  note: el.algoNote,
+});
+
 let visitedShown = 0;
+let weightsPainted = false; // cached so a paint drag does not re-render the card per cell
 
 const animator = new Animator({
   onStep: (step) => {
@@ -158,6 +175,13 @@ function reset() {
 
 // An edit invalidates whatever the last search drew.
 function handleEdit() {
+  // Painting the first (or last) weight changes the card's warning.
+  const nowPainted = board.weightCount > 0;
+  if (nowPainted !== weightsPainted) {
+    weightsPainted = nowPainted;
+    syncAlgorithmControls();
+  }
+
   if (phase === 'idle') return;
   animator.cancel();
   board.clearVisuals();
@@ -202,6 +226,7 @@ function setTool(tool) {
 function syncAlgorithmControls() {
   const algorithm = currentAlgorithm();
   el.heuristicWrap.classList.toggle('hidden', !algorithm?.usesHeuristic);
+  infoCard.render(algorithm, { ...runOptions(), hasWeights: weightsPainted });
 }
 
 function syncSpeed() {
@@ -239,6 +264,8 @@ el.clearPath.addEventListener('click', reset);
 el.clearAll.addEventListener('click', () => {
   reset();
   board.clearTerrain();
+  weightsPainted = false;
+  syncAlgorithmControls();
   setPhase('idle');
 });
 
@@ -255,7 +282,10 @@ el.algo.addEventListener('change', () => {
 });
 
 for (const input of [el.diagonals, el.heuristic]) {
-  input.addEventListener('change', reset);
+  input.addEventListener('change', () => {
+    syncAlgorithmControls(); // the admissibility warning depends on both
+    reset();
+  });
 }
 
 // ---- init ----

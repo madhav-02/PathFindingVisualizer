@@ -24,6 +24,7 @@ export class Board {
     this.tool = 'wall';
     this.interactive = true;
     this.hasVisuals = false; // lets callers skip a full-grid clear when idle
+    this.weightCount = 0; // kept incrementally so callers need no O(n) scan
 
     // drag state
     this.drag = null; // 'start' | 'end' | 'paint'
@@ -85,7 +86,11 @@ export class Board {
     }
     this.gridEl.replaceChildren(frag);
 
-    for (let i = 0; i < grid.n; i++) this.repaintCell(i);
+    this.weightCount = 0;
+    for (let i = 0; i < grid.n; i++) {
+      if (grid.weight[i] > 1) this.weightCount++;
+      this.repaintCell(i);
+    }
   }
 
   repaintCell(i) {
@@ -126,6 +131,7 @@ export class Board {
   clearTerrain() {
     this.grid.wall.fill(0);
     this.grid.weight.fill(1);
+    this.weightCount = 0;
     this.clearVisuals();
     this.repaintAll();
   }
@@ -149,6 +155,10 @@ export class Board {
     }
 
     if (grid.wall[i] === wasWall && grid.weight[i] === wasWeight) return false;
+
+    if (wasWeight > 1 && grid.weight[i] === 1) this.weightCount--;
+    else if (wasWeight === 1 && grid.weight[i] > 1) this.weightCount++;
+
     this.repaintCell(i);
     return true;
   }
