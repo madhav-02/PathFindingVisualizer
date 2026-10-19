@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pathfinding Visualizer</title>
+<meta name="description" content="Interactive visualizer for grid pathfinding algorithms: BFS, DFS, Dijkstra, A*, Greedy Best-First and Bidirectional BFS.">
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-200 antialiased">
+
+<div class="flex min-h-screen flex-col lg:h-screen lg:overflow-hidden">
+
+  <!-- Header -->
+  <header class="flex items-center justify-between gap-4 border-b border-slate-800 bg-slate-900/60 px-4 py-3">
+    <div class="flex items-baseline gap-3">
+      <h1 class="text-lg font-semibold tracking-tight text-slate-100">Pathfinding Visualizer</h1>
+      <span class="hidden text-xs text-slate-500 sm:inline">drag to draw walls &middot; drag the endpoints &middot; space to play</span>
+    </div>
+    <div id="status" class="rounded-full bg-slate-800 px-3 py-1 text-xs font-medium text-slate-400">Ready</div>
+  </header>
+
+  <!-- Controls -->
+  <div class="border-b border-slate-800 bg-slate-900/40 px-4 py-3">
+    <div class="flex flex-wrap items-end gap-x-5 gap-y-3">
+
+      <label class="flex flex-col gap-1">
+        <span class="text-[11px] font-medium uppercase tracking-wide text-slate-500">Algorithm</span>
+        <select id="algo" class="w-52 rounded-md border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-sky-500"></select>
+      </label>
+
+      <label id="heuristicWrap" class="flex flex-col gap-1">
+        <span class="text-[11px] font-medium uppercase tracking-wide text-slate-500">Heuristic</span>
+        <select id="heuristic" class="w-36 rounded-md border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-sky-500"></select>
+      </label>
+
+      <div class="flex flex-col gap-1">
+        <span class="text-[11px] font-medium uppercase tracking-wide text-slate-500">Draw tool</span>
+        <div id="tools" class="inline-flex overflow-hidden rounded-md border border-slate-700">
+          <button data-tool="wall"   class="tool-btn px-3 py-1.5 text-sm">Wall</button>
+          <button data-tool="weight" class="tool-btn border-l border-slate-700 px-3 py-1.5 text-sm">Weight</button>
+          <button data-tool="erase"  class="tool-btn border-l border-slate-700 px-3 py-1.5 text-sm">Erase</button>
+        </div>
+      </div>
+
+      <label class="flex flex-col gap-1">
+        <span class="text-[11px] font-medium uppercase tracking-wide text-slate-500">Maze</span>
+        <div class="flex gap-2">
+          <select id="maze" class="w-44 rounded-md border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-sky-500"></select>
+          <button id="generate" class="rounded-md bg-slate-700 px-3 py-1.5 text-sm font-medium text-slate-100 hover:bg-slate-600">Generate</button>
+        </div>
+      </label>
+
+      <label class="flex flex-col gap-1">
+        <span class="text-[11px] font-medium uppercase tracking-wide text-slate-500">Speed <span id="speedLabel" class="text-slate-400"></span></span>
+        <input id="speed" type="range" min="1" max="100" value="55" class="h-8 w-40 accent-sky-500">
+      </label>
+
+      <label class="flex cursor-pointer items-center gap-2 pb-1.5 text-sm text-slate-300">
+        <input id="diagonals" type="checkbox" class="size-4 accent-sky-500">
+        Allow diagonals
+      </label>
+
+      <div class="ml-auto flex items-end gap-2">
+        <button id="visualize" class="rounded-md bg-sky-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-40">Visualize</button>
+        <button id="pause" class="rounded-md bg-slate-700 px-3 py-1.5 text-sm font-medium text-slate-100 hover:bg-slate-600 disabled:opacity-40" disabled>Pause</button>
+        <button id="step" class="rounded-md bg-slate-700 px-3 py-1.5 text-sm font-medium text-slate-100 hover:bg-slate-600">Step</button>
+        <button id="clearPath" class="rounded-md border border-slate-700 px-3 py-1.5 text-sm font-medium text-slate-300 hover:bg-slate-800">Clear path</button>
+        <button id="clearAll" class="rounded-md border border-slate-700 px-3 py-1.5 text-sm font-medium text-slate-300 hover:bg-slate-800">Reset grid</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Board + sidebar -->
+  <main class="flex min-h-0 flex-1 flex-col lg:flex-row">
+
+    <section id="board" class="flex min-h-[55vh] flex-1 items-center justify-center overflow-hidden p-3">
+      <div id="grid" class="pf-grid" role="grid" aria-label="Pathfinding grid"></div>
+    </section>
+
+    <aside class="w-full shrink-0 space-y-4 border-t border-slate-800 bg-slate-900/40 p-4 lg:w-80 lg:overflow-y-auto lg:border-l lg:border-t-0">
+
+      <!-- Algorithm info -->
+      <div class="rounded-lg border border-slate-800 bg-slate-900 p-4">
+        <h2 id="algoName" class="text-sm font-semibold text-slate-100"></h2>
+        <p id="algoDesc" class="mt-1.5 text-xs leading-relaxed text-slate-400"></p>
+        <div id="algoBadges" class="mt-3 flex flex-wrap gap-1.5"></div>
+        <dl class="mt-3 space-y-1 border-t border-slate-800 pt-3 text-xs">
+          <div class="flex justify-between gap-2">
+            <dt class="text-slate-500">Time</dt><dd id="algoTime" class="font-mono text-slate-300"></dd>
+          </div>
+          <div class="flex justify-between gap-2">
+            <dt class="text-slate-500">Space</dt><dd id="algoSpace" class="font-mono text-slate-300"></dd>
+          </div>
+        </dl>
+        <p id="algoNote" class="mt-3 hidden rounded-md border border-amber-900/60 bg-amber-950/40 p-2 text-xs leading-relaxed text-amber-300"></p>
+      </div>
+
+      <!-- Stats -->
+      <div class="rounded-lg border border-slate-800 bg-slate-900 p-4">
+        <h2 class="text-sm font-semibold text-slate-100">Run stats</h2>
+        <dl class="mt-3 grid grid-cols-2 gap-3 text-sm">
+          <div><dt class="text-[11px] uppercase tracking-wide text-slate-500">Visited</dt><dd id="statVisited" class="font-mono text-slate-100">—</dd></div>
+          <div><dt class="text-[11px] uppercase tracking-wide text-slate-500">Path cells</dt><dd id="statLen" class="font-mono text-slate-100">—</dd></div>
+          <div><dt class="text-[11px] uppercase tracking-wide text-slate-500">Path cost</dt><dd id="statCost" class="font-mono text-slate-100">—</dd></div>
+          <div><dt class="text-[11px] uppercase tracking-wide text-slate-500">Compute</dt><dd id="statTime" class="font-mono text-slate-100">—</dd></div>
+        </dl>
+        <p id="statResult" class="mt-3 text-xs text-slate-400">No run yet.</p>
+      </div>
+
+      <!-- Legend -->
+      <div class="rounded-lg border border-slate-800 bg-slate-900 p-4">
+        <h2 class="text-sm font-semibold text-slate-100">Legend</h2>
+        <ul class="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-400">
+          <li class="flex items-center gap-2"><span class="pf-swatch start"></span>Start</li>
+          <li class="flex items-center gap-2"><span class="pf-swatch end"></span>Target</li>
+          <li class="flex items-center gap-2"><span class="pf-swatch wall"></span>Wall</li>
+          <li class="flex items-center gap-2"><span class="pf-swatch weight"></span>Weight (cost 10)</li>
+          <li class="flex items-center gap-2"><span class="pf-swatch visited"></span>Visited</li>
+          <li class="flex items-center gap-2"><span class="pf-swatch visited-b"></span>Visited (reverse)</li>
+          <li class="flex items-center gap-2"><span class="pf-swatch path"></span>Shortest path</li>
+        </ul>
+        <p class="mt-3 text-xs leading-relaxed text-slate-500">
+          Shortcuts: <kbd class="pf-kbd">space</kbd> play/pause,
+          <kbd class="pf-kbd">s</kbd> step, <kbd class="pf-kbd">r</kbd> clear path,
+          <kbd class="pf-kbd">c</kbd> reset grid, <kbd class="pf-kbd">m</kbd> maze.
+        </p>
+      </div>
+
+    </aside>
+  </main>
+</div>
+
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
