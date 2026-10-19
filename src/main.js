@@ -1,5 +1,5 @@
 import './styles.css';
-import { makeGrid } from './core/grid.js';
+import { makeGrid, resizeGrid } from './core/grid.js';
 import { heuristics, heuristicOrder } from './core/heuristics.js';
 import { algorithms, algorithmById } from './algorithms/index.js';
 import { Board } from './ui/board.js';
@@ -52,19 +52,21 @@ let lastRun = null;
 /** Smaller cells on phones, so a narrow screen still gets a usable grid. */
 const cellSizeForViewport = () => (window.innerWidth < 640 ? 18 : 24);
 
-/** Build the largest grid that fits the board area at the current cell size. */
-function fitGrid() {
+/** Largest grid that fits the board area, and sets the cell size it assumed. */
+function fitDimensions() {
   const cell = cellSizeForViewport();
   document.documentElement.style.setProperty('--cell', `${cell}px`);
 
-  const rows = clamp(Math.floor((el.boardArea.clientHeight - PADDING) / (cell + GAP)), 5, 80);
-  const cols = clamp(Math.floor((el.boardArea.clientWidth - PADDING) / (cell + GAP)), 5, 160);
-  return makeGrid(rows, cols);
+  return {
+    rows: clamp(Math.floor((el.boardArea.clientHeight - PADDING) / (cell + GAP)), 5, 80),
+    cols: clamp(Math.floor((el.boardArea.clientWidth - PADDING) / (cell + GAP)), 5, 160),
+  };
 }
 
 // ---- wiring ----
 
-const board = new Board(el.grid, fitGrid(), { onEdit: handleEdit });
+const initial = fitDimensions();
+const board = new Board(el.grid, makeGrid(initial.rows, initial.cols), { onEdit: handleEdit });
 board.mount();
 
 const stats = new Stats({
@@ -288,6 +290,24 @@ for (const input of [el.diagonals, el.heuristic]) {
     syncAlgorithmControls(); // the admissibility warning depends on both
     reset();
   });
+}
+
+// Debounced so a drag-resize rebuilds the grid once, not once per frame.
+let resizeTimer = 0;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(applyResize, 180);
+});
+
+function applyResize() {
+  const { rows, cols } = fitDimensions();
+  if (rows === board.grid.rows && cols === board.grid.cols) return;
+
+  reset();
+  board.setGrid(resizeGrid(board.grid, rows, cols));
+  weightsPainted = board.weightCount > 0;
+  syncAlgorithmControls();
+  setPhase('idle'); // refresh the status pill with the new dimensions
 }
 
 // Space picks the sensible action for the current phase; the rest just forward.

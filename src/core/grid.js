@@ -92,3 +92,45 @@ export function pathCost(grid, path) {
 export function newParents(n) {
   return new Int32Array(n).fill(-1);
 }
+
+/** Row/col of `i` in `from`, clamped into a rows x cols grid. */
+function clampInto(from, i, rows, cols) {
+  const r = Math.min(rowOf(from, i), rows - 1);
+  const c = Math.min(colOf(from, i), cols - 1);
+  return r * cols + c;
+}
+
+/**
+ * Re-fit a grid to new dimensions, keeping the terrain that still fits.
+ * Cells are copied by row/col, not by flat index, so walls stay put visually
+ * instead of shearing diagonally when the column count changes.
+ */
+export function resizeGrid(from, rows, cols) {
+  const next = makeGrid(rows, cols);
+  const copyRows = Math.min(from.rows, rows);
+  const copyCols = Math.min(from.cols, cols);
+
+  for (let r = 0; r < copyRows; r++) {
+    for (let c = 0; c < copyCols; c++) {
+      const src = r * from.cols + c;
+      const dst = r * cols + c;
+      next.wall[dst] = from.wall[src];
+      next.weight[dst] = from.weight[src];
+    }
+  }
+
+  next.start = clampInto(from, from.start, rows, cols);
+  next.end = clampInto(from, from.end, rows, cols);
+
+  // Clamping can collide the endpoints when the grid shrinks.
+  if (next.start === next.end) {
+    next.end = next.start === next.n - 1 ? next.start - 1 : next.start + 1;
+  }
+
+  next.wall[next.start] = 0;
+  next.wall[next.end] = 0;
+  next.weight[next.start] = 1;
+  next.weight[next.end] = 1;
+
+  return next;
+}
