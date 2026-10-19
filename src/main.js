@@ -1,45 +1,38 @@
-// Task 1 scaffold: proves the module graph, Tailwind build and grid CSS all
-// line up. Interaction, algorithms and animation arrive in later tasks.
-
 import './styles.css';
-import { makeGrid, rowOf, colOf } from './core/grid.js';
+import { makeGrid } from './core/grid.js';
 import { heuristics, heuristicOrder } from './core/heuristics.js';
+import { Board } from './ui/board.js';
 
-const CELL = 24; // keep in sync with --cell in styles.css
+const el = {
+  boardArea: document.getElementById('board'),
+  grid: document.getElementById('grid'),
+  heuristic: document.getElementById('heuristic'),
+  tools: document.getElementById('tools'),
+  clearPath: document.getElementById('clearPath'),
+  clearAll: document.getElementById('clearAll'),
+  status: document.getElementById('status'),
+};
 
-const boardEl = document.getElementById('board');
-const gridEl = document.getElementById('grid');
-const heuristicEl = document.getElementById('heuristic');
-const statusEl = document.getElementById('status');
+const GAP = 1; // must match the grid gap in styles.css
+const PADDING = 26; // board padding + grid border
 
-/** Largest grid that fits the board area at the current cell size. */
-function fitDimensions() {
-  const pad = 24;
-  const rows = Math.max(5, Math.floor((boardEl.clientHeight - pad) / (CELL + 1)));
-  const cols = Math.max(5, Math.floor((boardEl.clientWidth - pad) / (CELL + 1)));
-  return { rows, cols };
-}
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
-function render(grid) {
-  gridEl.style.setProperty('--cols', grid.cols);
-  const frag = document.createDocumentFragment();
+/** Smaller cells on phones, so a narrow screen still gets a usable grid. */
+const cellSizeForViewport = () => (window.innerWidth < 640 ? 18 : 24);
 
-  for (let i = 0; i < grid.n; i++) {
-    const cell = document.createElement('div');
-    cell.className = 'pf-cell';
-    if (i === grid.start) cell.classList.add('start');
-    else if (i === grid.end) cell.classList.add('end');
-    cell.dataset.i = i;
-    cell.setAttribute('role', 'gridcell');
-    cell.setAttribute('aria-label', `row ${rowOf(grid, i) + 1}, column ${colOf(grid, i) + 1}`);
-    frag.append(cell);
-  }
+/** Build the largest grid that fits the board area at the current cell size. */
+function fitGrid() {
+  const cell = cellSizeForViewport();
+  document.documentElement.style.setProperty('--cell', `${cell}px`);
 
-  gridEl.replaceChildren(frag);
+  const rows = clamp(Math.floor((el.boardArea.clientHeight - PADDING) / (cell + GAP)), 5, 80);
+  const cols = clamp(Math.floor((el.boardArea.clientWidth - PADDING) / (cell + GAP)), 5, 160);
+  return makeGrid(rows, cols);
 }
 
 function populateHeuristics() {
-  heuristicEl.replaceChildren(
+  el.heuristic.replaceChildren(
     ...heuristicOrder.map((key) => {
       const opt = document.createElement('option');
       opt.value = key;
@@ -49,8 +42,33 @@ function populateHeuristics() {
   );
 }
 
-const { rows, cols } = fitDimensions();
-const grid = makeGrid(rows, cols);
-render(grid);
+function setTool(tool) {
+  board.setTool(tool);
+  for (const btn of el.tools.querySelectorAll('[data-tool]')) {
+    btn.setAttribute('aria-pressed', String(btn.dataset.tool === tool));
+  }
+}
+
+function showGridSize() {
+  el.status.textContent = `Grid ${board.grid.rows} \u00d7 ${board.grid.cols}`;
+}
+
+// An edit invalidates whatever the last search drew.
+function handleEdit() {
+  board.clearVisuals();
+}
+
+const board = new Board(el.grid, fitGrid(), { onEdit: handleEdit });
+board.mount();
+
 populateHeuristics();
-statusEl.textContent = `Grid ${rows} x ${cols}`;
+setTool('wall');
+showGridSize();
+
+el.tools.addEventListener('click', (event) => {
+  const tool = event.target.closest('[data-tool]')?.dataset.tool;
+  if (tool) setTool(tool);
+});
+
+el.clearPath.addEventListener('click', () => board.clearVisuals());
+el.clearAll.addEventListener('click', () => board.clearTerrain());
