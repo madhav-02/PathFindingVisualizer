@@ -146,22 +146,24 @@ function run({ animate = true } = {}) {
   visitedShown = 0;
   stats.startRun(elapsedMs);
   animator.load(buildSteps(result));
-
-  // Editing mid-animation would desync the drawing from the model.
-  board.setInteractive(false);
   board.setAnimated(animate);
 
   if (animate) {
+    // Editing mid-animation would desync the drawing from the model.
+    board.setInteractive(false);
     setPhase('playing');
     animator.play();
   } else {
+    // Instant: no interaction lockout, because this path runs *during* a drag.
     animator.runRemaining();
   }
 }
 
 function handleAnimationDone() {
   board.setInteractive(true);
-  board.setAnimated(true);
+  // Animation stays off until the next animated run asks for it. Clearing
+  // no-anim here would let an instant run's cells animate after all, since the
+  // class never survives to a style recalculation.
   if (lastRun) stats.finish(lastRun.algorithm, lastRun.result, board.grid);
   setPhase('done');
 }
@@ -187,6 +189,14 @@ function handleEdit() {
   }
 
   if (phase === 'idle') return;
+
+  // After a finished run, keep the result live: recompute instantly so the
+  // path follows the endpoint (or the wall) under the pointer.
+  if (phase === 'done' && lastRun) {
+    run({ animate: false });
+    return;
+  }
+
   animator.cancel();
   board.clearVisuals();
   lastRun = null;
