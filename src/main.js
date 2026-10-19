@@ -1,13 +1,23 @@
 import './styles.css';
 import { makeGrid } from './core/grid.js';
 import { heuristics, heuristicOrder } from './core/heuristics.js';
+import { algorithms, algorithmById } from './algorithms/index.js';
 import { Board } from './ui/board.js';
+import { Animator } from './ui/animator.js';
 
 const el = {
   boardArea: document.getElementById('board'),
   grid: document.getElementById('grid'),
+  algo: document.getElementById('algo'),
   heuristic: document.getElementById('heuristic'),
+  heuristicWrap: document.getElementById('heuristicWrap'),
   tools: document.getElementById('tools'),
+  speed: document.getElementById('speed'),
+  speedLabel: document.getElementById('speedLabel'),
+  diagonals: document.getElementById('diagonals'),
+  visualize: document.getElementById('visualize'),
+  pause: document.getElementById('pause'),
+  step: document.getElementById('step'),
   clearPath: document.getElementById('clearPath'),
   clearAll: document.getElementById('clearAll'),
   status: document.getElementById('status'),
@@ -17,6 +27,12 @@ const GAP = 1; // must match the grid gap in styles.css
 const PADDING = 26; // board padding + grid border
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+/** 'idle' | 'playing' | 'paused' | 'done' */
+let phase = 'idle';
+let lastRun = null;
+
+// ---- layout ----
 
 /** Smaller cells on phones, so a narrow screen still gets a usable grid. */
 const cellSizeForViewport = () => (window.innerWidth < 640 ? 18 : 24);
@@ -31,15 +47,123 @@ function fitGrid() {
   return makeGrid(rows, cols);
 }
 
-function populateHeuristics() {
-  el.heuristic.replaceChildren(
-    ...heuristicOrder.map((key) => {
-      const opt = document.createElement('option');
-      opt.value = key;
-      opt.textContent = heuristics[key].name;
-      return opt;
-    }),
-  );
+// ---- wiring ----
+
+const board = new Board(el.grid, fitGrid(), { onEdit: handleEdit });
+board.mount();
+
+const animator = new Animator({
+  onStep: (step) => {
+    if (step.kind === 'visit') board.markVisited(step.i, step.side);
+    else board.markPath(step.i);
+  },
+  onDone: handleAnimationDone,
+});
+
+function option(value, label) {
+  const opt = document.createElement('option');
+  opt.value = value;
+  opt.textContent = label;
+  return opt;
+}
+
+function populateSelects() {
+  el.algo.replaceChildren(...algorithms.map((a) => option(a.id, a.name)));
+  el.heuristic.replaceChildren(...heuristicOrder.map((k) => option(k, heuristics[k].name)));
+}
+
+const currentAlgorithm = () => algorithmById.get(el.algo.value);
+const runOptions = () => ({
+  allowDiagonals: el.diagonals.checked,
+  heuristic: el.heuristic.value,
+});
+
+// ---- run / animate ----
+
+function buildSteps({ visitedOrder, visitedSide, path }) {
+  const steps = [];
+  for (const i of visitedOrder) {
+    steps.push({ kind: 'visit', i, side: visitedSide ? visitedSide[i] : 0 });
+  }
+  for (const i of path) steps.push({ kind: 'path', i });
+  return steps;
+}
+
+function run({ animate = true } = {}) {
+  const algorithm = currentAlgorithm();
+  if (!algorithm) return;
+
+  animator.cancel();
+  board.clearVisuals();
+
+  const t0 = performance.now();
+  const result = algorithm.run(board.grid, runOptions());
+  const elapsedMs = performance.now() - t0;
+
+  lastRun = { algorithm, result, elapsedMs };
+  animator.load(buildSteps(result));
+
+  // Editing mid-animation would desync the drawing from the model.
+  board.setInteractive(false);
+  board.setAnimated(animate);
+
+  if (animate) {
+    setPhase('playing');
+    animator.play();
+  } else {
+    animator.runRemaining();
+  }
+}
+
+function handleAnimationDone() {
+  board.setInteractive(true);
+  board.setAnimated(true);
+  setPhase('done');
+}
+
+/** Drop back to an editable, un-animated grid. */
+function reset() {
+  animator.cancel();
+  board.clearVisuals();
+  board.setInteractive(true);
+  board.setAnimated(true);
+  lastRun = null;
+  setPhase('idle');
+}
+
+// An edit invalidates whatever the last search drew.
+function handleEdit() {
+  if (phase === 'idle') return;
+  animator.cancel();
+  board.clearVisuals();
+  lastRun = null;
+  setPhase('idle');
+}
+
+// ---- view state ----
+
+function setPhase(next) {
+  phase = next;
+  const { pause, step, visualize, status } = el;
+
+  pause.disabled = phase !== 'playing' && phase !== 'paused';
+  pause.textContent = phase === 'paused' ? 'Resume' : 'Pause';
+  visualize.disabled = phase === 'playing';
+  step.disabled = phase === 'done';
+
+  if (phase === 'idle') {
+    status.textContent = `Grid ${board.grid.rows} \u00d7 ${board.grid.cols}`;
+  } else if (phase === 'playing') {
+    status.textContent = 'Searching\u2026';
+  } else if (phase === 'paused') {
+    const { done, total } = animator.progress;
+    status.textContent = `Paused ${done} / ${total}`;
+  } else if (lastRun) {
+    const { result } = lastRun;
+    status.textContent = result.found
+      ? `Path found \u00b7 ${result.path.length} cells \u00b7 ${result.visitedOrder.length} visited`
+      : `No path \u00b7 ${result.visitedOrder.length} visited`;
+  }
 }
 
 function setTool(tool) {
@@ -49,26 +173,69 @@ function setTool(tool) {
   }
 }
 
-function showGridSize() {
-  el.status.textContent = `Grid ${board.grid.rows} \u00d7 ${board.grid.cols}`;
+function syncAlgorithmControls() {
+  const algorithm = currentAlgorithm();
+  el.heuristicWrap.classList.toggle('hidden', !algorithm?.usesHeuristic);
 }
 
-// An edit invalidates whatever the last search drew.
-function handleEdit() {
-  board.clearVisuals();
+function syncSpeed() {
+  animator.setSpeed(Number(el.speed.value));
+  el.speedLabel.textContent = el.speed.value;
 }
 
-const board = new Board(el.grid, fitGrid(), { onEdit: handleEdit });
-board.mount();
+// ---- events ----
 
-populateHeuristics();
-setTool('wall');
-showGridSize();
+el.visualize.addEventListener('click', () => run());
+
+el.pause.addEventListener('click', () => {
+  if (phase === 'playing') {
+    animator.pause();
+    setPhase('paused');
+  } else if (phase === 'paused') {
+    setPhase('playing');
+    animator.play();
+  }
+});
+
+el.step.addEventListener('click', () => {
+  if (!animator.loaded || phase === 'idle') {
+    run({ animate: true });
+    animator.pause();
+    setPhase('paused');
+    return;
+  }
+  animator.stepOnce();
+  if (phase !== 'done') setPhase('paused');
+});
+
+el.clearPath.addEventListener('click', reset);
+
+el.clearAll.addEventListener('click', () => {
+  reset();
+  board.clearTerrain();
+  setPhase('idle');
+});
 
 el.tools.addEventListener('click', (event) => {
   const tool = event.target.closest('[data-tool]')?.dataset.tool;
   if (tool) setTool(tool);
 });
 
-el.clearPath.addEventListener('click', () => board.clearVisuals());
-el.clearAll.addEventListener('click', () => board.clearTerrain());
+el.speed.addEventListener('input', syncSpeed);
+
+el.algo.addEventListener('change', () => {
+  syncAlgorithmControls();
+  reset();
+});
+
+for (const input of [el.diagonals, el.heuristic]) {
+  input.addEventListener('change', reset);
+}
+
+// ---- init ----
+
+populateSelects();
+setTool('wall');
+syncAlgorithmControls();
+syncSpeed();
+setPhase('idle');
