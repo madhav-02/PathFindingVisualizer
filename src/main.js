@@ -4,6 +4,7 @@ import { heuristics, heuristicOrder } from './core/heuristics.js';
 import { algorithms, algorithmById } from './algorithms/index.js';
 import { Board } from './ui/board.js';
 import { Animator } from './ui/animator.js';
+import { Stats } from './ui/stats.js';
 
 const el = {
   boardArea: document.getElementById('board'),
@@ -21,6 +22,11 @@ const el = {
   clearPath: document.getElementById('clearPath'),
   clearAll: document.getElementById('clearAll'),
   status: document.getElementById('status'),
+  statVisited: document.getElementById('statVisited'),
+  statLen: document.getElementById('statLen'),
+  statCost: document.getElementById('statCost'),
+  statTime: document.getElementById('statTime'),
+  statResult: document.getElementById('statResult'),
 };
 
 const GAP = 1; // must match the grid gap in styles.css
@@ -52,11 +58,26 @@ function fitGrid() {
 const board = new Board(el.grid, fitGrid(), { onEdit: handleEdit });
 board.mount();
 
+const stats = new Stats({
+  visited: el.statVisited,
+  len: el.statLen,
+  cost: el.statCost,
+  time: el.statTime,
+  result: el.statResult,
+});
+
+let visitedShown = 0;
+
 const animator = new Animator({
   onStep: (step) => {
-    if (step.kind === 'visit') board.markVisited(step.i, step.side);
-    else board.markPath(step.i);
+    if (step.kind === 'visit') {
+      board.markVisited(step.i, step.side);
+      visitedShown++;
+    } else {
+      board.markPath(step.i);
+    }
   },
+  onFrame: () => stats.setVisited(visitedShown),
   onDone: handleAnimationDone,
 });
 
@@ -101,6 +122,8 @@ function run({ animate = true } = {}) {
   const elapsedMs = performance.now() - t0;
 
   lastRun = { algorithm, result, elapsedMs };
+  visitedShown = 0;
+  stats.startRun(elapsedMs);
   animator.load(buildSteps(result));
 
   // Editing mid-animation would desync the drawing from the model.
@@ -118,6 +141,7 @@ function run({ animate = true } = {}) {
 function handleAnimationDone() {
   board.setInteractive(true);
   board.setAnimated(true);
+  if (lastRun) stats.finish(lastRun.algorithm, lastRun.result, board.grid);
   setPhase('done');
 }
 
@@ -128,6 +152,7 @@ function reset() {
   board.setInteractive(true);
   board.setAnimated(true);
   lastRun = null;
+  stats.reset();
   setPhase('idle');
 }
 
@@ -137,6 +162,7 @@ function handleEdit() {
   animator.cancel();
   board.clearVisuals();
   lastRun = null;
+  stats.reset();
   setPhase('idle');
 }
 
@@ -238,4 +264,5 @@ populateSelects();
 setTool('wall');
 syncAlgorithmControls();
 syncSpeed();
+stats.reset();
 setPhase('idle');

@@ -17,10 +17,14 @@ export class Animator {
   #perFrame = 8;
   #onStep;
   #onDone;
+  #onFrame;
 
-  constructor({ onStep, onDone }) {
+  constructor({ onStep, onDone, onFrame }) {
     this.#onStep = onStep;
     this.#onDone = onDone ?? (() => {});
+    // Fires once per frame rather than once per step, so readouts can track a
+    // fast animation without a DOM write per cell.
+    this.#onFrame = onFrame ?? (() => {});
   }
 
   /** Slider position 1..100 -> steps per frame, exponential so the slow end is usable. */
@@ -71,6 +75,7 @@ export class Animator {
     this.pause();
     if (this.done) return false;
     this.#apply();
+    this.#onFrame();
     if (this.done) this.#onDone();
     return true;
   }
@@ -79,6 +84,7 @@ export class Animator {
   runRemaining() {
     this.pause();
     while (!this.done) this.#apply();
+    this.#onFrame();
     this.#onDone();
   }
 
@@ -106,6 +112,8 @@ export class Animator {
       this.#budget -= cost;
       this.#apply();
     }
+
+    this.#onFrame();
 
     if (this.done) {
       this.#budget = 0;
