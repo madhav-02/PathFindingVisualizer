@@ -17,7 +17,8 @@
 import { bfs } from './bfs.js';
 import { dfs } from './dfs.js';
 import { dijkstra } from './dijkstra.js';
+import { astar } from './astar.js';
 
-export const algorithms = [bfs, dijkstra, dfs];
+export const algorithms = [astar, bfs, dijkstra, dfs];
 
 export const algorithmById = new Map(algorithms.map((a) => [a.id, a]));
